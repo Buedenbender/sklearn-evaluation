@@ -2,6 +2,7 @@
 Setup tasks (requires invoke: pip install invoke)
 """
 from invoke import task
+import platform
 
 
 @task
@@ -14,10 +15,12 @@ def setup(c, version=None):
     env_name = f"sk-eval{suffix}"
 
     c.run(f"conda create --name {env_name} python={version} --yes")
+    if platform.system() == "Windows":
+        conda_hook = "conda shell.bash hook "
+    else:
+        conda_hook = 'eval "$(conda shell.bash hook)" '
     c.run(
-        'eval "$(conda shell.bash hook)" '
-        f"&& conda activate {env_name} "
-        "&& pip install --editable .[all] "
+        f"{conda_hook} && conda activate {env_name} && pip install --editable .[dev]"
         "&& pip install invoke lxml"
     )  # lxml needed for NotebookCollection.py example
 
