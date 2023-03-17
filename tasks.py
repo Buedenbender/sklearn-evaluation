@@ -15,8 +15,7 @@ def setup(c, version=None):
 
     c.run(f"conda create --name {env_name} python={version} --yes")
     c.run(
-        'eval "$(conda shell.bash hook)" '
-        f"&& conda activate {env_name} "
+        f"conda activate {env_name} "
         "&& pip install --editable .[all] "
         "&& pip install invoke lxml"
     )  # lxml needed for NotebookCollection.py example
