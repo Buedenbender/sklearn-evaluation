@@ -1,4 +1,5 @@
 import numpy as np
+
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import auc
@@ -43,40 +44,47 @@ def _validate_metrics_input(precision, recall):
             "precision and recall lengths should correspond. "
             f"Received: precision {len(precision)} != recall {len(recall)}"
         )
+    #! Add test for thresholds
 
 
 def _precision_recall_metrics(y_true, y_score):
-    precision, recall, _ = precision_recall_curve(y_true, y_score)
-    return precision, recall
+    precision, recall, threshold = precision_recall_curve(y_true, y_score)
+    return precision, recall, threshold
 
 
 def _precision_recall_metrics_multiclass(y_true, y_score):
-    precision, recall, _ = precision_recall_curve(y_true.ravel(), y_score.ravel())
-    return precision, recall
+    precision, recall, threshold = precision_recall_curve(
+        y_true.ravel(), y_score.ravel()
+    )
+    return precision, recall, threshold
 
 
 def _multiclass_metrics_from_raw(y_true, y_score, n_classes, label):
     y_true_bin = label_binarize(y_true, classes=np.unique(y_true))
 
-    plot_metrics_recall, plot_metrics_precision = [[] for _ in range(n_classes + 1)], [
-        [] for _ in range(n_classes + 1)
-    ]
+    plot_metrics_recall, plot_metrics_precision, plot_metrics_threshold = (
+        [[] for _ in range(n_classes + 1)],
+        [[] for _ in range(n_classes + 1)],
+        [[] for _ in range(n_classes + 1)],
+    )
 
     (
         plot_metrics_precision[0],
         plot_metrics_recall[0],
+        plot_metrics_threshold[0],
     ) = _precision_recall_metrics_multiclass(y_true_bin, y_score)
 
     for i in range(n_classes):
         (
             plot_metrics_precision[i + 1],
             plot_metrics_recall[i + 1],
+            plot_metrics_threshold[i + 1],
         ) = _precision_recall_metrics(y_true_bin[:, i], y_score[:, i])
 
     if label is None:
         label = ["Micro-average"] + _generate_labels(n_classes)
 
-    return plot_metrics_precision, plot_metrics_recall, label
+    return plot_metrics_precision, plot_metrics_recall, plot_metrics_threshold, label
 
 
 def _plot_metrics_multiclass(precision, recall, labels, ax):
@@ -94,6 +102,7 @@ def _generate_labels(n_classes):
     return [f"PR Curve {i + 1}" for i in range(n_classes)]
 
 
+# %%
 class PrecisionRecall(AbstractPlot):
     """
     Plot precision recall curve.
@@ -134,9 +143,10 @@ class PrecisionRecall(AbstractPlot):
 
     @modify_exceptions
     @SKLearnEvaluationLogger.log(feature="plot", action="precision-recall-init")
-    def __init__(self, precision, recall, label=None):
+    def __init__(self, precision, recall, threshold, label=None):
         self.precision = precision
         self.recall = recall
+        self.threshold = threshold
         self.label = label
 
         _validate_metrics_input(self.precision, self.recall)
@@ -158,7 +168,6 @@ class PrecisionRecall(AbstractPlot):
             and all(isinstance(elem, (list, np.ndarray)) for elem in self.recall)
             and len(self.precision) > 1
         ):
-
             if self.label is None:
                 self.label = _generate_labels(len(self.recall))
 
@@ -210,6 +219,7 @@ class PrecisionRecall(AbstractPlot):
         return PrecisionRecallAdd(
             precisions=[self.precision, another.precision],
             recalls=[self.recall, another.recall],
+            thresholds=[self.threshold, another.threshold],
             labels=[self.label, another.label],
         ).plot()
 
@@ -257,40 +267,43 @@ class PrecisionRecall(AbstractPlot):
             if label is not None:
                 label = ["Micro-average"] + label
             # convert y_true to binary format
-            precision, recall, label = _multiclass_metrics_from_raw(
+            precision, recall, threshold, label = _multiclass_metrics_from_raw(
                 y_true, y_score, n_classes, label
             )
 
             return cls(
                 precision,
                 recall,
+                threshold,
                 label=label,
             ).plot()
 
         else:
-            precision, recall = (
+            precision, recall, threshold = (
                 _precision_recall_metrics(y_true, y_score)
                 if y_score_is_vector
                 else _precision_recall_metrics(y_true, y_score[:, 1])
             )
 
-            return cls(precision, recall, label=label).plot()
+            return cls(precision, recall, threshold, label=label).plot()
 
     def _get_data(self):
         return {
             "class": "sklearn_evaluation.plot.precision_recall.PrecisionRecall",
             "recall": list(self.recall),
             "precision": list(self.precision),
+            "threshold": list(self.threshold),
             "label": self.label,
             "version": __version__,
         }
 
 
 class PrecisionRecallAdd(AbstractComposedPlot):
-    def __init__(self, precisions, recalls, labels) -> None:
+    def __init__(self, precisions, recalls, labels, thresholds) -> None:
         self.precisions = precisions
         self.recalls = recalls
         self.labels = labels
+        self.thresholds = thresholds
 
     @apply_theme()
     def plot(self, ax=None):
